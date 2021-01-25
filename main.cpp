@@ -81,7 +81,6 @@ void getSamples(Eigen::MatrixXd& ptSamples, Eigen::MatrixXd& points, int numberO
     }
 }
 
-
 void computeRt(Eigen::MatrixXd& R, Eigen::RowVector3d t, Eigen::MatrixXd& P, Eigen::MatrixXd& Q){
     //Alignment phase
     /*
@@ -115,9 +114,6 @@ void computeRt(Eigen::MatrixXd& R, Eigen::RowVector3d t, Eigen::MatrixXd& P, Eig
 
     //Compute the SVD of A then assemble R and t
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    cout << svd.matrixU().rows() << " x " << svd.matrixU().cols() << endl;
-    cout << svd.matrixV().rows() << " x " << svd.matrixV().cols() << endl;
-
     R = svd.matrixV() * svd.matrixU().transpose();
     t = samplesBC - (R * samplesNNBC.transpose()).transpose();
 }
@@ -133,115 +129,74 @@ int main(int argc, char* args[]){
 
     //Create viewer for displaying the file
     igl::opengl::glfw::Viewer viewer;
-    //viewer.data().set_mesh(V1, F1);    // This will display the mesh with the faces too
 
-    //Instead I will just display point clouds instead
+    Eigen::MatrixXd currV2 = V2;
+    iterations.push_back(V2);
+    int iter = 20;
+    for(int i = 0; i < iter; i++) {
+        //First sample points
+        int numOfSamples = V1.rows();
+        numOfSamples = 2000;
+        Eigen::MatrixXd samples(numOfSamples, 3);
+        getSamples(samples, V1, numOfSamples);
+
+        //We have our set of points P
+        //Next we need to find the closest point for each p in Q
+
+        //First construct our octree out of our Q Points
+        //Initialize Octree properties
+        std::vector<std::vector<int>> O_PI; //Points inside each Octree cell
+        Eigen::MatrixXi O_CH; //Children of each node in the Octree
+        Eigen::MatrixXd O_CN; //Mid point of each node in the Octree
+        Eigen::VectorXd O_W; //Width of each node in the Octree
+
+        //Compute Octree
+        igl::octree(currV2, O_PI, O_CH, O_CN, O_W);
+
+        //Set up results matrix for kNN
+        Eigen::MatrixXi kNNResults; //This will hold the kNN for each point we give to the algorithm
+        int numNN = 1;
+        igl::knn(samples, currV2, numNN, O_PI, O_CH, O_CN, O_W, kNNResults);
+        std::cout << "Correspondences found" << std::endl;
+        //Collect the V2 points found
+        Eigen::MatrixXd samplesNN(samples.rows(), samples.cols());
+        for (int sample = 0; sample < numOfSamples; sample++) {
+            int rowIndex = kNNResults.row(sample)(0);
+            samplesNN.row(sample) = V2.row(rowIndex);
+        }
+
+        //The commented code below is for visualizing the results of the knn
+        /*
+         * render the sample points and their nn
+        viewer.data().add_points(samples, Eigen::RowVector3d(1,1,1));
+        //Eigen::MatrixXd nnMinDistance(samples.rows(), numNN);
+        for(int k = 0; k < numOfSamples; k++){
+            Eigen::RowVectorXi nn = kNNResults.row(k);
+            Eigen::RowVector3d rndColour(rand(), rand(), rand());
+            rndColour = rndColour / rndColour.sum();
+            for(int neighbour = 0; neighbour < nn.size(); neighbour++){
+                int index = nn(neighbour);
+                viewer.data().add_points(V2.row(index), rndColour);
+                double distance = (samples.row(k) - V2.row(index)).array().square().sum();
+                nnMinDistance(k, neighbour) = distance;
+                V2.row(index) = Eigen::RowVector3d(0,0,0);
+            }
+        }
+        */
+
+        //TODO::Create a outlier rejection phase
+
+        //Alignment phase
+        Eigen::MatrixXd R;
+        Eigen::RowVector3d t;
+        computeRt(R, t, samples, samplesNN);
+        currV2 = currV2 * R;
+        iterations.push_back(currV2);
+        cout << "Iteration number: " << i << endl;
+    }
     viewer.data().point_size = point_size;
     viewer.data().add_points(V1, Eigen::RowVector3d(1, 0, 0.5)); //pink
-    viewer.data().add_points(V2, Eigen::RowVector3d(0.4, 0.5, 0.1)); //greenish
-
-    //Store V2 has the first iteration
-    iterations.push_back(V2);
-
-    //First sample points
-    int numOfSamples = V1.rows();
-    //numOfSamples = 100;
-    Eigen::MatrixXd samples(numOfSamples, 3);
-    getSamples(samples, V1, numOfSamples);
-    cout << "Got samples" << endl;
-    cout << samples << endl;
-
-    //We have our set of points P
-    //Next we need to find the closest point for each p in Q
-
-    //First construct our octree out of our Q Points
-    //Initialize Octree properties
-    std::vector<std::vector<int>> O_PI; //Points inside each Octree cell
-    Eigen::MatrixXi O_CH; //Children of each node in the Octree
-    Eigen::MatrixXd O_CN; //Mid point of each node in the Octree
-    Eigen::VectorXd O_W; //Width of each node in the Octree
-
-    //Compute Octree
-    igl::octree(V2, O_PI, O_CH, O_CN, O_W);
-
-    //Set up results matrix for kNN
-    Eigen::MatrixXi kNNResults; //This will hold the kNN for each point we give to the algorithm
-    int numNN = 1;
-    igl::knn(samples, V2, numNN, O_PI, O_CH, O_CN, O_W, kNNResults);
-    std::cout << "Correspondences found" << std::endl;
-    //Collect the V2 points found
-    Eigen::MatrixXd samplesNN(samples.rows(), samples.cols());
-    for(int sample = 0; sample < numOfSamples; sample++){
-        int rowIndex = kNNResults.row(sample)(0);
-        samplesNN.row(sample) = V2.row(rowIndex);
-    }
-
-    //The commented code below is for visualizing the results of the knn
-    /*
-     * render the sample points and their nn
-    viewer.data().add_points(samples, Eigen::RowVector3d(1,1,1));
-    //Eigen::MatrixXd nnMinDistance(samples.rows(), numNN);
-    for(int k = 0; k < numOfSamples; k++){
-        Eigen::RowVectorXi nn = kNNResults.row(k);
-        Eigen::RowVector3d rndColour(rand(), rand(), rand());
-        rndColour = rndColour / rndColour.sum();
-        for(int neighbour = 0; neighbour < nn.size(); neighbour++){
-            int index = nn(neighbour);
-            viewer.data().add_points(V2.row(index), rndColour);
-            double distance = (samples.row(k) - V2.row(index)).array().square().sum();
-            nnMinDistance(k, neighbour) = distance;
-            V2.row(index) = Eigen::RowVector3d(0,0,0);
-        }
-    }
-    */
-
-    //TODO::Create a outlier rejection phase
-
-    //Alignment phase
-    /*
-     * 1. Compute the barycenters for each point sets. There are 2 point sets I have:
-     *    The sampled points P and the nn of the sampled points Q
-     * 2. Compute the new pointsets P_hat and Q_hat
-     * 3. Compute matrix A
-     * 4. Compute SVD of matrix A = ULV'
-     * 5. Compute R = VU'
-     * 6. Compute t = p_barycenter - R*q_barycenter
-     */
-
-    //Computing barycenters for samples and its nn
-    Eigen::RowVector3d samplesBC = samples.colwise().sum();
-    Eigen::RowVector3d samplesNNBC = samplesNN.colwise().sum();
-
-    //Compute the recentered points
-    Eigen::MatrixXd hatSamples = Eigen::MatrixXd::Zero(samples.rows(), samples.cols());
-    Eigen::MatrixXd hatSampleNN = Eigen::MatrixXd::Zero(samplesNN.rows(), samplesNN.cols());
-
-    for(int rowId = 0; rowId < samples.rows(); rowId++){
-        hatSamples.row(rowId) = samples.row(rowId) - samplesBC;
-        hatSampleNN.row(rowId) = samplesNN.row(rowId) - samplesNNBC;
-    }
-
-    //Assemble matrix A
-    Eigen::MatrixXd A = Eigen::MatrixXd::Zero(3, 3);
-    for(int rowId = 0; rowId < samples.rows(); rowId++){
-        A = A + (hatSampleNN.row(rowId).transpose() * hatSamples.row(rowId));
-    }
-
-    //Compute the SVD of A then assemble R and t
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    cout << svd.matrixU().rows() << " x " << svd.matrixU().cols() << endl;
-    cout << svd.matrixV().rows() << " x " << svd.matrixV().cols() << endl;
-
-    Eigen::MatrixXd R = svd.matrixV() * svd.matrixU().transpose();
-    cout << "computed R" << endl;
-    Eigen::RowVector3d t = samplesBC - (R * samplesNNBC.transpose()).transpose();
-    cout << "computed t" << endl;
-    Eigen::MatrixXd adjustedSampleNN = V2 * R;
-    iterations.push_back(adjustedSampleNN);
-    cout << adjustedSampleNN.rows() << "x" << adjustedSampleNN.cols() << endl;
-    //viewer.data().add_points(adjustedSampleNN, Eigen::RowVector3d(1,1,1));
-
-    //Config and launch the viewer
+    viewer.data().add_points(currV2, Eigen::RowVector3d(0.4, 0.5, 0.1)); //greenish
     viewer.callback_key_down =  &key_down;
     viewer.launch();
 
