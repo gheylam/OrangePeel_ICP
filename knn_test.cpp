@@ -6,7 +6,6 @@
 #include <igl/octree.h>
 #include <igl/opengl/glfw/Viewer.h>
 #include <igl/get_seconds.h>
-#include "gnuplot_i.h"
 
 
 using namespace std;
@@ -14,8 +13,8 @@ Eigen::MatrixXd V1;
 Eigen::MatrixXi F1;
 int point_size = 10;
 int displaying = 0;
-vector<Eigen::MatrixXd> iterations;
-vector<double> sqrDiff;
+Eigen::MatrixXd samplesG;
+Eigen::MatrixXd samplesNNG;
 
 bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier){
     if(key == '1'){
@@ -31,16 +30,17 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
             displaying--;
             cout << "displaying iteration: " << displaying << endl;
             viewer.data().clear();
-            viewer.data().add_points(V1, Eigen::RowVector3d(1, 0, 0.5));
-            viewer.data().add_points(iterations[displaying], Eigen::RowVector3d(0.4, 0.5, 0.1));
+
+            viewer.data().add_points(samplesG.row(displaying), Eigen::RowVector3d(1, 1, 1));
+            viewer.data().add_points(samplesNNG.row(displaying), Eigen::RowVector3d(0, 0, 0));
         }
     }else if(key == '4'){
-        if(displaying != (iterations.size()-1)){
+        if(displaying != samplesG.rows()-1){
             displaying++;
             cout << "displaying iteration: " << displaying << endl;
             viewer.data().clear();
-            viewer.data().add_points(V1, Eigen::RowVector3d(1, 0, 0.5));
-            viewer.data().add_points(iterations[displaying], Eigen::RowVector3d(0.4, 0.5, 0.1));
+            viewer.data().add_points(samplesG.row(displaying), Eigen::RowVector3d(1, 1, 1));
+            viewer.data().add_points(samplesNNG.row(displaying), Eigen::RowVector3d(00, 0, 0));
         }
     }
     return false;
@@ -104,16 +104,8 @@ void computeRt(Eigen::MatrixXd& R, Eigen::RowVector3d& t, Eigen::MatrixXd& sampl
 
     //Compute the recentered points
     Eigen::MatrixXd hatSamples = sampledPts.rowwise() - samplesBC;
-    Eigen::MatrixXd hatSamplesNN = sampledPtsNN.rowwise() - samplesNNBC;
-    /*
-    Eigen::MatrixXd hatSamples = Eigen::MatrixXd::Zero(sampledPts.rows(), sampledPts.cols());
-    Eigen::MatrixXd hatSamplesNN = Eigen::MatrixXd::Zero(sampledPtsNN.rows(), sampledPtsNN.cols());
+    Eigen::MatrixXd hatSamplesNN = samplesNNBC.rowwise() - samplesNNBC;
 
-    for(int rowId = 0; rowId < sampledPts.rows(); rowId++){
-        hatSamples.row(rowId) = sampledPts.row(rowId) - samplesBC;
-        hatSamplesNN.row(rowId) = sampledPtsNN.row(rowId) - samplesNNBC;
-    }
-    */
 
     //Assemble matrix A
     Eigen::MatrixXd A = Eigen::MatrixXd::Zero(3, 3);
@@ -124,32 +116,9 @@ void computeRt(Eigen::MatrixXd& R, Eigen::RowVector3d& t, Eigen::MatrixXd& sampl
     //Compute the SVD of A then assemble R and t
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
     R = svd.matrixV() * svd.matrixU().transpose();
-    cout << "t: R*qi" << (R*samplesBC.transpose()).transpose() << endl;
-    t = samplesNNBC - ((R*samplesBC.transpose()).transpose());
-    cout << "t: pi - R*qi: " << t << endl;
+    cout << R << endl;
+    t = samplesNNBC - (R * samplesBC.transpose()).transpose();
 
-}
-
-double computeSqrDiff(Eigen::MatrixXd& samples, Eigen::MatrixXd& samplesNN){
-    double sqrDiff = (samples - samplesNN).cwiseAbs2().sum();
-    return sqrDiff;
-}
-
-void wait_for_key ()
-{
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__TOS_WIN__)  // every keypress registered, also arrow keys
-    cout << endl << "Press any key to continue..." << endl;
-
-    FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
-    _getch();
-#elif defined(unix) || defined(__unix) || defined(__unix__) || defined(__APPLE__)
-    cout << endl << "Press ENTER to continue..." << endl;
-
-    std::cin.clear();
-    std::cin.ignore(std::cin.rdbuf()->in_avail());
-    std::cin.get();
-#endif
-    return;
 }
 
 int main(int argc, char* args[]){
@@ -174,56 +143,54 @@ int main(int argc, char* args[]){
     igl::octree(V1, O_PI, O_CH, O_CN, O_W);
 
     Eigen::MatrixXd currV2 = V2;
-    iterations.push_back(V2);
-    int iter = 20;
-    for(int i = 0; i < iter; i++) {
-        //Take samples from V2 (which change every iteration)
-        int numOfSamples = 1000;
-        Eigen::MatrixXd samples(numOfSamples, 3);
-        getSamples(samples, currV2, numOfSamples);
 
-        //We have our set of points P
-        //Next we need to find the closest point for each p in Q
+    //Take samples from V2 (which change every iteration)
+    int numOfSamples = 1000;
+    Eigen::MatrixXd samples(numOfSamples, 3);
+    getSamples(samples, currV2, numOfSamples);
 
-        //Set up results matrix for kNN
-        Eigen::MatrixXi kNNResults; //This will hold the kNN for each point we give to the algorithm
-        int numNN = 1;
-        double tic = igl::get_seconds();
-        igl::knn(samples, V1, numNN, O_PI, O_CH, O_CN, O_W, kNNResults);
-        printf("%0.4f secs\n",igl::get_seconds()-tic);
+    //We have our set of points P
+    //Next we need to find the closest point for each p in Q
 
-        //Collect the V1 points found
-        Eigen::MatrixXd samplesNN(samples.rows(), samples.cols());
-        for (int sample = 0; sample < numOfSamples; sample++) {
-            int rowIndex = kNNResults.row(sample)(0);
-            samplesNN.row(sample) = V1.row(rowIndex);
-        }
-        cout << "passed collecting points" << endl;
+    //Set up results matrix for kNN
+    Eigen::MatrixXi kNNResults; //This will hold the kNN for each point we give to the algorithm
+    int numNN = 1;
+    double tic = igl::get_seconds();
+    igl::knn(samples, V1, numNN, O_PI, O_CH, O_CN, O_W, kNNResults);
+    printf("%0.4f secs\n",igl::get_seconds()-tic);
 
-
-
-
-        //TODO::Create a outlier rejection phase
-
-        //Alignment phase
-        Eigen::MatrixXd R;
-        Eigen::RowVector3d t;
-        computeRt(R, t, samples, samplesNN);
-        currV2 = (R*currV2.transpose()).transpose().rowwise() + t;
-        iterations.push_back(currV2);
-        cout << "Iteration number: " << i << endl;
-
-        double epsilon = computeSqrDiff(currV2, V1);
-        sqrDiff.push_back(epsilon);
-        if(i != 0 && sqrDiff[i-1] - epsilon < 0.001){
-            Gnuplot g1("lines");
-            //g1.set_title("Convergence");
-            g1.plot_x(sqrDiff, "Convergence");
-            g1.showonscreen();
-            wait_for_key();
-            break;
-        }
+    //Collect the V1 points found
+    cout << "num of samples: " << numOfSamples << endl;
+    cout << "num of rows: " << samples.rows() << endl;
+    Eigen::MatrixXd samplesNN(samples.rows(), samples.cols());
+    for (int sample = 0; sample < numOfSamples; sample++) {
+        cout << sample << endl;
+        int rowIndex = kNNResults.row(sample)(0);
+        samplesNN.row(sample) = V1.row(rowIndex);
     }
+    cout << "passed collecting points" << endl;
+    samplesG = samples;
+    samplesNNG = samplesNN;
+
+    Eigen::MatrixXd R;
+    Eigen::RowVector3d t;
+
+    computeRt(R, t, samples, samplesNN);
+
+    //Computing barycenters for samples and its nn
+    Eigen::RowVector3d samplesBC = samples.colwise().sum()/samples.rows();
+    Eigen::RowVector3d samplesNNBC = samplesNN.colwise().sum()/samplesNN.rows();
+
+    viewer.data().add_points(samplesBC, Eigen::RowVector3d(1, 0, 0));
+    viewer.data().add_points(samplesNNBC, Eigen::RowVector3d(0, 1, 0))
+
+    //Compute the recentered points
+    Eigen::MatrixXd hatSamples = samples.rowwise() - samplesBC;
+    Eigen::MatrixXd hatSamplesNN = samplesNN.rowwise() - samplesNNBC;
+
+    viewer.data().add_points(hatSamples, Eigen::RowVector3d(1,1,1));
+    viewer.data().add_points(hatSamplesNN, Eigen::RowVector3d(0,0,0));
+
     viewer.data().point_size = point_size;
     viewer.data().add_points(V1, Eigen::RowVector3d(1, 0, 0.5)); //pink
     viewer.data().add_points(currV2, Eigen::RowVector3d(0.4, 0.5, 0.1)); //greenish

@@ -26,11 +26,9 @@ set(EXE_NAME ${PROJECT_NAME}_bin)
 set(CMAKE_CXX_STANDARD 11)
 
 #add binary
-add_executable(${EXE_NAME} ${SRCFILES} ${INCLUDEFILES})
+add_executable(${EXE_NAME} ./main.cpp ${INCLUDEFILES})
+add_executable(${EXE_NAME}_test ./knn_test.cpp ${INCLUDEFILES})
 
-message(SRCFILES=${SRCFILES})
-message(INCLUDEFILES=${INCLUDEFILES})
-message(SRCFILES=${SRCFILES})
 message(INCLUDEFILES=${INCLUDEFILES})
 
 target_link_libraries(${EXE_NAME}
@@ -40,6 +38,12 @@ target_link_libraries(${EXE_NAME}
         igl::opengl_glfw_imgui
         )
 
+target_link_libraries(${EXE_NAME}_test
+        igl::core
+        igl::opengl
+        igl::opengl_glfw
+        igl::opengl_glfw_imgui
+        )
 
 
 
