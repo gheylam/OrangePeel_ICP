@@ -98,8 +98,6 @@ void computeRt(Eigen::MatrixXd& R, Eigen::RowVector3d& t, Eigen::MatrixXd& sampl
     //Computing barycenters for samples and its nn
     Eigen::RowVector3d samplesBC = sampledPts.colwise().sum()/sampledPts.rows();
     Eigen::RowVector3d samplesNNBC = sampledPtsNN.colwise().sum()/sampledPtsNN.rows();
-    cout << "samplesBC" << samplesBC << endl;
-    cout << "samplesNNBC" << samplesNNBC << endl;
 
 
     //Compute the recentered points
@@ -124,9 +122,8 @@ void computeRt(Eigen::MatrixXd& R, Eigen::RowVector3d& t, Eigen::MatrixXd& sampl
     //Compute the SVD of A then assemble R and t
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
     R = svd.matrixV() * svd.matrixU().transpose();
-    cout << "t: R*qi" << (R*samplesBC.transpose()).transpose() << endl;
     t = samplesNNBC - ((R*samplesBC.transpose()).transpose());
-    cout << "t: pi - R*qi: " << t << endl;
+
 
 }
 
@@ -153,12 +150,28 @@ void wait_for_key ()
 }
 
 int main(int argc, char* args[]){
+    //parameters
+    double acceptanceThreshold = 3;
+    int iter = 200;
+    int numOfSamples = 5000;
+    if(argc > 1)
+    {
+        iter = stoi(args[1]);
+        acceptanceThreshold = stoi(args[2]);
+        numOfSamples = stoi(args[3]);
+    }
+
     //Load in the files
 
     Eigen::MatrixXd V2;
     Eigen::MatrixXi F2;
     igl::readPLY("../bunny_v2/bun000_v2.ply", V1, F1);
-    igl::readPLY("../bunny_v2/bun045_v2.ply", V2, F2);
+    if(argc > 1){
+        igl::readPLY(args[4], V2, F2);
+    }else{
+        igl::readPLY("../bunny_v2/bun045_v2.ply", V2, F2);
+    }
+
 
 
     //Create viewer for displaying the file
@@ -175,10 +188,9 @@ int main(int argc, char* args[]){
 
     Eigen::MatrixXd currV2 = V2;
     iterations.push_back(V2);
-    int iter = 20;
+
     for(int i = 0; i < iter; i++) {
         //Take samples from V2 (which change every iteration)
-        int numOfSamples = 1000;
         Eigen::MatrixXd samples(numOfSamples, 3);
         getSamples(samples, currV2, numOfSamples);
 
@@ -200,22 +212,35 @@ int main(int argc, char* args[]){
         }
         cout << "passed collecting points" << endl;
 
-
-
-
         //TODO::Create a outlier rejection phase
+
+        Eigen::MatrixXd sampleDists = (samples - samplesNN).cwiseAbs2().rowwise().sum();
+        std::vector<int> keepers;
+        double averageDist = sampleDists.sum() / numOfSamples;
+        for(int sample=0; sample < numOfSamples; sample++){
+            if(sampleDists(sample) < (averageDist * acceptanceThreshold)){
+                keepers.push_back(sample);
+            }
+        }
+        Eigen::MatrixXd keptSamples = Eigen::MatrixXd::Zero(keepers.size(), 3);
+        Eigen::MatrixXd keptSamplesNN = Eigen::MatrixXd::Zero(keepers.size(), 3);
+        for(int keeperIndex = 0; keeperIndex < keepers.size(); keeperIndex++){
+            int index = keepers[keeperIndex];
+            keptSamples.row(keeperIndex) = samples.row(index);
+            keptSamplesNN.row(keeperIndex) = samplesNN.row(index);
+        }
 
         //Alignment phase
         Eigen::MatrixXd R;
         Eigen::RowVector3d t;
-        computeRt(R, t, samples, samplesNN);
+        computeRt(R, t, keptSamples, keptSamplesNN);
         currV2 = (R*currV2.transpose()).transpose().rowwise() + t;
         iterations.push_back(currV2);
         cout << "Iteration number: " << i << endl;
 
         double epsilon = computeSqrDiff(currV2, V1);
         sqrDiff.push_back(epsilon);
-        if(i != 0 && sqrDiff[i-1] - epsilon < 0.001){
+        if(i != 0 && abs(sqrDiff[i-1] - epsilon) < 0.001){
             Gnuplot g1("lines");
             //g1.set_title("Convergence");
             g1.plot_x(sqrDiff, "Convergence");

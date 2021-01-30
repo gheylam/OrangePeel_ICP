@@ -28,6 +28,10 @@ set(CMAKE_CXX_STANDARD 11)
 #add binary
 add_executable(${EXE_NAME} ./main.cpp ${INCLUDEFILES})
 add_executable(${EXE_NAME}_test ./knn_test.cpp ${INCLUDEFILES})
+add_executable(${EXE_NAME}_q2 ./q2.cpp ${INCLUDEFILES})
+add_executable(${EXE_NAME}_q3 ./q3.cpp ${INCLUDEFILES})
+add_executable(${EXE_NAME}_test2 ./axisTest.cpp ${INCLUDEFILES})
+add_executable(${EXE_NAME}_q4 ./q4.cpp ${INCLUDEFILES})
 
 message(INCLUDEFILES=${INCLUDEFILES})
 
@@ -44,6 +48,35 @@ target_link_libraries(${EXE_NAME}_test
         igl::opengl_glfw
         igl::opengl_glfw_imgui
         )
+
+target_link_libraries(${EXE_NAME}_q2
+        igl::core
+        igl::opengl
+        igl::opengl_glfw
+        igl::opengl_glfw_imgui
+        )
+
+target_link_libraries(${EXE_NAME}_q3
+        igl::core
+        igl::opengl
+        igl::opengl_glfw
+        igl::opengl_glfw_imgui
+        )
+
+target_link_libraries(${EXE_NAME}_test2
+        igl::core
+        igl::opengl
+        igl::opengl_glfw
+        igl::opengl_glfw_imgui
+        )
+
+target_link_libraries(${EXE_NAME}_q4
+        igl::core
+        igl::opengl
+        igl::opengl_glfw
+        igl::opengl_glfw_imgui
+        )
+
 
 
 
