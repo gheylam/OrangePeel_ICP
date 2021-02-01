@@ -32,6 +32,8 @@ add_executable(${EXE_NAME}_q2 ./q2.cpp ${INCLUDEFILES})
 add_executable(${EXE_NAME}_q3 ./q3.cpp ${INCLUDEFILES})
 add_executable(${EXE_NAME}_test2 ./axisTest.cpp ${INCLUDEFILES})
 add_executable(${EXE_NAME}_q4 ./q4.cpp ${INCLUDEFILES})
+add_executable(${EXE_NAME}_q5 ./q5.cpp ${INCLUDEFILES})
+add_executable(${EXE_NAME}_q6 ./q6.cpp ${INCLUDEFILES})
 
 message(INCLUDEFILES=${INCLUDEFILES})
 
@@ -77,6 +79,19 @@ target_link_libraries(${EXE_NAME}_q4
         igl::opengl_glfw_imgui
         )
 
+target_link_libraries(${EXE_NAME}_q5
+        igl::core
+        igl::opengl
+        igl::opengl_glfw
+        igl::opengl_glfw_imgui
+        )
+
+target_link_libraries(${EXE_NAME}_q6
+        igl::core
+        igl::opengl
+        igl::opengl_glfw
+        igl::opengl_glfw_imgui
+        )
 
 
 

@@ -243,7 +243,10 @@ void addZeroMeanNoise(Eigen::MatrixXd& outputM, Eigen::MatrixXd& inputM, double 
     outputM = rndMatrix;
 }
 
-
+/*
+ * This program is used for experimenting how sampling affects the
+ * accurary of the ICP convergence
+ */
 
 
 int main(int argc, char* args[]){
@@ -254,22 +257,16 @@ int main(int argc, char* args[]){
     igl::readPLY("../bunny_v2/bun045_v2.ply", V2_OG, F2);
     //Parameters for running this added noise model
     vector<double> RESNORM;
+    vector<int> samplesTaken;
     vector<int> iterationsDone; //Vector holding the number of iterations per added noise model
-    int icpIter = 200;          //Number of iterations ICP algorithm will run for
+    int icpIter = 100;          //Number of iterations ICP algorithm will run for
     int numOfSamples = 500;    //Number of samples used in the ICP algorithm
     double acceptanceThreshold = 0.8;  //Outlier elimination thresholding parameter
-
+    int maxSamples = 1500;
     if(argc > 1){
-        noiseMax = stod(args[1]);
-        noiseIncr = stod(args[2]);
-        icpIter = stoi(args[3]);
-        acceptanceThreshold = stod(args[4]);
-
-        if(*args[5] == 'f'){
-            numOfSamples = V2_OG.rows();
-        }else{
-            numOfSamples = stoi(args[5]);
-        }
+        icpIter = stoi(args[1]);
+        acceptanceThreshold = stod(args[2]);
+        maxSamples = stoi(args[3]);
     }
 
     //Construct our octree out of our Q Points (that we are trying to map to)
@@ -281,13 +278,9 @@ int main(int argc, char* args[]){
     //Compute Octree
     igl::octree(V1, O_PI, O_CH, O_CN, O_W);
 
-    for(double d = noiseMin; d <= noiseMax; d+=noiseIncr){
-        //Add noise to the V2 vertices
-        Eigen::MatrixXd V2;
-        addZeroMeanNoise(V2, V2_OG, d);
-        cout << "Noise added: " << d << endl;
-
-
+    for(int s = 500; s <= maxSamples; s+=500){
+        numOfSamples = s;
+        Eigen::MatrixXd V2 = V2_OG;
         for(int i = 0; i < icpIter; i++) {
             //Take samples from V2 (which change every iteration)
             Eigen::MatrixXd samples(numOfSamples, 3);
@@ -344,20 +337,28 @@ int main(int argc, char* args[]){
             }
             */
             if(i == (icpIter-1)){
+                double dSqrDiff = computeSqrDiff(V2, V1);
+                cout << "Sqr Difference: " << dSqrDiff << endl;
                 iterations.push_back(V2);
-                RESNORM.push_back(computeSqrDiff(V2, V1));
+                samplesTaken.push_back(s);
+                RESNORM.push_back(dSqrDiff);
                 iterationsDone.push_back(i);
             }
         }
-
     }
     Gnuplot g1("lines");
-    cout << "SQR ERROR " << RESNORM.size() << endl;
-    cout << "iterationsDone: " << iterationsDone.size() << endl;
-    g1.set_xlabel("samples");
-    g1.set_ylabel("iterations");
-    g1.plot_xy(sdNoise,iterationsDone, "ConvergenceRate");
+
+    g1.set_xlabel("Samples Taken");
+    g1.set_ylabel("ERROR");
+    g1.plot_xy(samplesTaken,RESNORM, "ICP Accuracy");
     g1.showonscreen();
+    /*
+        Gnuplot g2("lines");
+        g2.set_xlabel("Samples Taken");
+        g2.set_ylabel("SQR ERROR");
+        g2.plot_xy(samplesTaken, RESNORM, "ICP Accuracy");
+        g2.showonscreen();
+    */
     wait_for_key();
 
     //Create viewer for displaying the file

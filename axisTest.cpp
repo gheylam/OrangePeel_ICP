@@ -242,16 +242,80 @@ void addZeroMeanNoise(Eigen::MatrixXd& outputM, Eigen::MatrixXd& inputM, double 
     outputM = rndMatrix;
 }
 
+void computeBoundaryBox(Eigen::MatrixXd& boundaryPoints, Eigen::MatrixXd& mesh){
+    //Finds the boundary box coordinates of a mesh
+    Eigen::MatrixXd pts = Eigen::MatrixXd::Zero(8, 3);
+    //Min and Max of X-axis
+    double minX = mesh.col(0).minCoeff();
+    double maxX = mesh.col(0).maxCoeff();
+    //Min and Max of Y-axis
+    double minY = mesh.col(1).minCoeff();
+    double maxY = mesh.col(1).maxCoeff();
+    //Min and Max of Z-axis
+    double minZ = mesh.col(2).minCoeff();
+    double maxZ = mesh.col(2).maxCoeff();
+
+    pts.row(0) = Eigen::RowVector3d(minX, minY, minZ);
+    pts.row(1) = Eigen::RowVector3d(minX, maxY, minZ);
+    pts.row(2) = Eigen::RowVector3d(maxX, maxY, minZ);
+    pts.row(3) = Eigen::RowVector3d(maxX, minY, minZ);
+    pts.row(4) = Eigen::RowVector3d(minX, minY, maxZ);
+    pts.row(5) = Eigen::RowVector3d(minX, maxY, maxZ);
+    pts.row(6) = Eigen::RowVector3d(maxX, maxY, maxZ);
+    pts.row(7) = Eigen::RowVector3d(maxX, minY, maxZ);
+
+    boundaryPoints = pts;
+}
+
+void computeBoundaryEdges(Eigen::MatrixXd& edgePts1, Eigen::MatrixXd& edgePt2, Eigen::MatrixXd& boundaryPts){
+    Eigen::MatrixXd pts = Eigen::MatrixXd::Zero(12, 3);
+    Eigen::MatrixXd matchingPts = Eigen::MatrixXd::Zero(12, 3);
+    pts.block(0, 0, 8, 3) = boundaryPts;
+    pts.block(8, 0, 4, 3) = boundaryPts.block(0, 0, 4, 3);
+
+    matchingPts.row(0) = boundaryPts.row(1);
+    matchingPts.row(1) = boundaryPts.row(2);
+    matchingPts.row(2) = boundaryPts.row(3);
+    matchingPts.row(3) = boundaryPts.row(0);
+    matchingPts.row(4) = boundaryPts.row(5);
+    matchingPts.row(5) = boundaryPts.row(6);
+    matchingPts.row(6) = boundaryPts.row(7);
+    matchingPts.row(7) = boundaryPts.row(4);
+    matchingPts.row(8) = boundaryPts.row(4);
+    matchingPts.row(9) = boundaryPts.row(5);
+    matchingPts.row(10) = boundaryPts.row(6);
+    matchingPts.row(11) = boundaryPts.row(7);
+
+    edgePts1 = pts;
+    edgePt2 = matchingPts;
+}
 
 int main(int argc, char* args[]){
     Eigen::MatrixXd V2;
-
+    Eigen::MatrixXi F2;
+    Eigen::MatrixXd V3;
+    Eigen::MatrixXi F3;
+    Eigen::MatrixXd V4;
+    Eigen::MatrixXi F4;
+    Eigen::MatrixXd V5;
+    Eigen::MatrixXi F5;
+    Eigen::MatrixXd V6;
+    Eigen::MatrixXi F6;
     //Load in the non transformed bunny
     igl::readPLY("../bunny_v2/bun000_v2.ply", V1, F1);
+    igl::readPLY("../bunny_v2/bun045_v2.ply", V2, F2);
+    igl::readPLY("../bunny_v2/bun090_v2.ply", V3, F3);
+    igl::readPLY("../bunny_v2/bun180_v2.ply", V4, F4);
+    igl::readPLY("../bunny_v2/bun270_v2.ply", V5, F5);
+    igl::readPLY("../bunny_v2/bun315_v2.ply", V6, F6);
+
+    //Rotate extreme bunnies closer to center bunny
+
 
     //Create viewer for displaying the file
     igl::opengl::glfw::Viewer viewer;
 
+    //Testing rotation method
     /*
      * Displaying axis and centering bunny
     Eigen::RowVector3d v1Centroid = V1.colwise().sum() / V1.rows();
@@ -294,17 +358,62 @@ int main(int argc, char* args[]){
     viewer.data().add_points(centeredV1, Eigen::RowVector3d(1, 0, 0.5)); //pink
     viewer.data().add_points(iterations[0], Eigen::RowVector3d(0.4, 0.5, 0.1)); //greenish
     */
+    //Testing adding noise method
+    /*
+     * The following is for testing the noise function
+        double sd = 0.1;
+        if(argc > 1){
+            sd = std::stod(args[1]);
 
-    double sd = 0.1;
-    if(argc > 1){
-        sd = std::stod(args[1]);
+        }
+        //Adding noise to V1 and storing the noised points into V2
+        addZeroMeanNoise(V2, V1, sd);
+    */
+    //Testing boundary boxes
+    //Find the boundary box of a mesh
+    Eigen::MatrixXd mBoundaryV1;
+    Eigen::MatrixXd mBoundaryV2;
+    Eigen::MatrixXd mBoundaryV3;
+    Eigen::MatrixXd mBoundaryV4;
+    Eigen::MatrixXd mBoundaryV5;
+    Eigen::MatrixXd mBoundaryV6;
+    computeBoundaryBox(mBoundaryV1, V1);
+    computeBoundaryBox(mBoundaryV2, V2);
+    computeBoundaryBox(mBoundaryV3, V3);
+    computeBoundaryBox(mBoundaryV4, V4);
+    computeBoundaryBox(mBoundaryV5, V5);
+    computeBoundaryBox(mBoundaryV6, V6);
 
-    }
+    Eigen::MatrixXd edge1_V1;
+    Eigen::MatrixXd edge2_V1;
+    Eigen::MatrixXd edge1_V2;
+    Eigen::MatrixXd edge2_V2;
+    Eigen::MatrixXd edge1_V3;
+    Eigen::MatrixXd edge2_V3;
+    Eigen::MatrixXd edge1_V4;
+    Eigen::MatrixXd edge2_V4;
 
-    //Adding noise to V1 and storing the noised points into V2
-    addZeroMeanNoise(V2, V1, sd);
-    viewer.data().add_points(V1, Eigen::RowVector3d(1, 0, 0));
-    viewer.data().add_points(V2, Eigen::RowVector3d(0, 1, 1));
+    computeBoundaryEdges(edge1_V1, edge2_V1, mBoundaryV1);
+    computeBoundaryEdges(edge1_V2, edge2_V2, mBoundaryV2);
+    computeBoundaryEdges(edge1_V3, edge2_V3, mBoundaryV3);
+    computeBoundaryEdges(edge1_V4, edge2_V4, mBoundaryV4);
+
+    //plot the boundary box
+    viewer.data().add_points(mBoundaryV1, Eigen::RowVector3d(1,0,0));
+    viewer.data().add_points(V1, Eigen::RowVector3d(0, 0.8, 0.2));
+    viewer.data().add_edges(edge1_V1, edge2_V1, Eigen::RowVector3d(1, 0, 0));
+
+    viewer.data().add_points(mBoundaryV2, Eigen::RowVector3d(0,0,1));
+    viewer.data().add_points(V2, Eigen::RowVector3d(1, 0.8, 0.2));
+    viewer.data().add_edges(edge1_V2, edge2_V2, Eigen::RowVector3d(1, 0, 0));
+
+    viewer.data().add_points(mBoundaryV3, Eigen::RowVector3d(0,1,1));
+    viewer.data().add_points(V3, Eigen::RowVector3d(1, 0.5, 1));
+    viewer.data().add_edges(edge1_V3, edge2_V3, Eigen::RowVector3d(0, 1, 1));
+
+    viewer.data().add_points(mBoundaryV4, Eigen::RowVector3d(0, 1, 1));
+    viewer.data().add_points(V4, Eigen::RowVector3d(0.3, 0.3, 1));
+    viewer.data().add_edges(edge1_V4, edge2_V4, Eigen::RowVector3d(0, 1, 1));
     viewer.callback_key_down =  &key_down;
     viewer.launch();
 
